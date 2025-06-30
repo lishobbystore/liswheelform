@@ -3,6 +3,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
+import pytz
 
 # --- Google Sheets API setup ---
 scope = [
@@ -80,7 +81,9 @@ with st.container():
         elif not wa_number.strip().isdigit():
             st.error("Nomor WhatsApp harus berupa angka saja (tanpa spasi atau simbol).")
         else:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            tz = pytz.timezone("Asia/Jakarta")
+            current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
             orders_sheet.append_row([
                 name,
                 wa_number,
