@@ -57,7 +57,7 @@ with st.container():
 
     st.image("banner.jpg", use_container_width=True)
     st.title(" Lis Live Discount Form")
-    st.markdown(f'<div>Already spun the wheel on our live? Let’s lock your deal — fill this out and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
+    st.markdown(f'<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
 
     name = st.text_input("Nama Kamu")
     wa_number = st.text_input("Nomor WhatsApp")
@@ -71,11 +71,11 @@ with st.container():
 
     discount = st.selectbox("Choose Discount", [10, 15, 20, 30, 35, 50])
     final_price = price * (1 - discount / 100)
-    st.markdown(f'<div class="price">Harga Final setelah {discount}% discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
+    st.markdown(f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
 
     if st.button("Submit Order"):
         if not name.strip() or not wa_number.strip():
-            st.error("Tolong isi Nama Kamu and Nomor WhatsApp.")
+            st.error("Tolong Isi Nama Kamu and Nomor WhatsApp.")
         elif not wa_number.strip().isdigit():
             st.error("Nomor WhatsApp harus berupa angka saja (tanpa spasi atau simbol).")
         else:
