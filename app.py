@@ -62,22 +62,25 @@ with st.container():
     st.title(" Lis Live Discount Form")
     st.markdown(f'<div>Already spun the wheel on our live? Let’s lock your deal — fill this out and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
 
-    name = st.text_input("Your Name")
-    wa_number = st.text_input("WhatsApp Number")
+    name = st.text_input("Nama Kamu")
+    wa_number = st.text_input("Nomor WhatsApp")
 
     item_names = df["ItemName"].tolist()
-    selected_item = st.selectbox("Choose Item", item_names)
+    st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
+    selected_item = st.selectbox("Pilih Item", item_names)
 
     price = float(df.loc[df["ItemName"] == selected_item, "Price"].values[0])
-    st.markdown(f'<div class="price">Price: Rp {price:,.0f}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
     discount = st.selectbox("Choose Discount", [10, 15, 20, 30, 35, 50])
     final_price = price * (1 - discount / 100)
-    st.markdown(f'<div class="price">Final Price after {discount}% discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
+    st.markdown(f'<div class="price">Harga Final setelah {discount}% discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
 
     if st.button("Submit Order"):
         if not name.strip() or not wa_number.strip():
-            st.error("Please fill in your Name and WhatsApp Number.")
+            st.error("Tolong isi Nama Kamu and Nomor WhatsApp.")
+        elif not wa_number.strip().isdigit():
+            st.error("Nomor WhatsApp harus berupa angka saja (tanpa spasi atau simbol).")
         else:
             orders_sheet.append_row([
                 name,
@@ -90,8 +93,8 @@ with st.container():
             st.success("Order submitted! Please follow the instructions below to pay.")
 
             st.markdown("""
-            ## Payment Instructions  
-            Transfer to: **BCA 2530244574 a/n PT. Licht Cahaya Abadi**  
+            ## Instruski Pembayaran 
+            Transfer ke: **BCA 2530244574 a/n PT. Licht Cahaya Abadi**  
             Mohon cantumkan note:
             - `"Pembayaran atas nama {0}"` 
 
