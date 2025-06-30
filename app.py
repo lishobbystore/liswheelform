@@ -23,7 +23,6 @@ sheet_key = st.secrets["sheets"]["sheet_key"]
 inventory_sheet = client.open_by_key(sheet_key).worksheet("Inventory")
 orders_sheet = client.open_by_key(sheet_key).worksheet("Orders")
 
-
 # Load inventory data
 data = inventory_sheet.get_all_records()
 df = pd.DataFrame(data)
@@ -50,8 +49,6 @@ st.markdown(
         border-top: 1px solid #cce0ff;
     }
     </style>
-
-    
     """,
     unsafe_allow_html=True
 )
