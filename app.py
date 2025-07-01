@@ -62,7 +62,15 @@ with st.container():
     st.markdown(f'<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
 
     name = st.text_input("Nama Kamu")
-    wa_number = st.text_input("Nomor WhatsApp")
+    wa_number = st.text_input("Nomor WhatsApp", placeholder = "0891234567788")
+
+    address = st.text_area(
+        "Alamat Lengkap", 
+        placeholder="Contoh: Jl. Medan Merdeka Utara No. 3, Kel. Gambir, Kec. Gambir, Kota Jakarta Pusat, DKI Jakarta 10110"
+    )
+    
+    st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
+
 
     item_names = df["ItemName"].tolist()
     st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
@@ -76,8 +84,8 @@ with st.container():
     st.markdown(f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
 
     if st.button("Submit Order"):
-        if not name.strip() or not wa_number.strip():
-            st.error("Tolong Isi Nama Kamu and Nomor WhatsApp.")
+        if not name.strip() or not wa_number.strip() or not address.strip():
+            st.error("Tolong isi Nama Kamu, Nomor WhatsApp, dan Alamat Lengkap.")
         elif not wa_number.strip().isdigit():
             st.error("Nomor WhatsApp harus berupa angka saja (tanpa spasi atau simbol).")
         else:
@@ -85,14 +93,16 @@ with st.container():
             current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
             orders_sheet.append_row([
+                current_time,
                 name,
                 wa_number,
+                address,
                 selected_item,
                 price,
                 discount,
-                final_price,
-                current_time 
+                final_price
             ])
+            
             st.success("Order submitted! Please follow the instructions below to pay.")
 
             st.markdown("""
@@ -108,6 +118,7 @@ with st.container():
             st.subheader("Order Summary")
             st.write(f"**Name:** {name}")
             st.write(f"**WhatsApp:** {wa_number}")
+            st.write(f"**Alamat:** {address}")
             st.write(f"**Item:** {selected_item}")
             st.write(f"**Original Price:** Rp {price:,.0f}")
             st.write(f"**Discount:** {discount}%")
