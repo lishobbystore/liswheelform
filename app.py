@@ -71,7 +71,6 @@ with st.container():
     
     st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
 
-
     item_names = df["ItemName"].tolist()
     st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
     selected_item = st.selectbox("Pilih Item", item_names)
