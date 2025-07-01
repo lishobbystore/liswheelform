@@ -71,7 +71,7 @@ with st.container():
     price = float(df.loc[df["ItemName"] == selected_item, "Price"].values[0])
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
-    discount = st.selectbox("Choose Discount", [10, 15, 20, 30, 35, 50])
+    discount = st.selectbox("Dapet Discount Berapa % di Live?", [10, 15, 20, 30, 35, 50])
     final_price = price * (1 - discount / 100)
     st.markdown(f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
 
