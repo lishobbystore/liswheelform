@@ -4,14 +4,13 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
 import pytz
+import json
 
 # --- Google Sheets API setup ---
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-
-import json
 
 # Get creds from secrets
 service_account_info = st.secrets["gcp_service_account"]
@@ -73,14 +72,12 @@ st.markdown(
 )
 
 with st.container():
-
     st.image("banner.jpg", use_container_width=True)
     st.title(" Lis Live Discount Form")
     st.markdown(f'<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
 
     name = st.text_input("Nama Kamu")
     wa_number = st.text_input("Nomor WhatsApp", placeholder = "0891234567788")
-
     address = st.text_area(
         "Alamat Lengkap", 
         placeholder="Contoh: Jl. Medan Merdeka Utara No. 3, Kel. Gambir, Kec. Gambir, Kota Jakarta Pusat, DKI Jakarta 10110"
@@ -89,14 +86,17 @@ with st.container():
     st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
 
     item_names = df["ItemName"].tolist()
+    
     st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
     selected_item = st.selectbox("Pilih Item", item_names)
 
     price = float(df.loc[df["ItemName"] == selected_item, "Price"].values[0])
+    
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
     discount = st.selectbox("Dapet Discount Berapa % di Live?", [10, 15, 20, 25, 30, 35, 50])
     final_price = price * (1 - discount / 100)
+    
     st.markdown(f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
 
     if st.button("Submit Order"):
