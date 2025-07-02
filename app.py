@@ -40,6 +40,7 @@ st.markdown(
 
     .footer-desktop {
         display: block;
+        text-align: center;
     }
     .footer-mobile {
         display: none;
@@ -51,6 +52,7 @@ st.markdown(
         }
         .footer-mobile {
             display: block;
+            text-align: left;
         }
     }
 
@@ -61,7 +63,6 @@ st.markdown(
         width: 100%;
         background-color: #f0f6ff;  /* same light blue as form box */
         color: #222;
-        text-align: center;
         padding: 10px;
         font-size: 12px;
         border-top: 1px solid #cce0ff;
