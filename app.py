@@ -38,6 +38,22 @@ st.markdown(
         font-weight: bold; 
     }
 
+    .footer-desktop {
+        display: block;
+    }
+    .footer-mobile {
+        display: none;
+    }
+
+    @media (max-width: 768px) {
+        .footer-desktop {
+            display: none;
+        }
+        .footer-mobile {
+            display: block;
+        }
+    }
+
     .footer {
         position: fixed;
         left: 0;
@@ -126,8 +142,11 @@ with st.container():
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
     """
-    <div class="footer">
+    <div class="footer footer-desktop">
         &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
+    </div>
+    <div class="footer footer-mobile">
+        Follow @lishobbystore on Instagram for more promos!
     </div>
     """,
     unsafe_allow_html=True
