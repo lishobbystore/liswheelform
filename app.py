@@ -18,13 +18,22 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# Open your Google Sheets
-inventory_sheet = client.open_by_key(sheet_key).worksheet("Inventory")
+# ----- Cached loader for Inventory (anti-429) -----
+@st.cache_data(ttl=60)  # cache for 60 seconds
+def load_inventory(_sheet_key: str) -> pd.DataFrame:
+    ws = client.open_by_key(_sheet_key).worksheet("Inventory")
+    data = ws.get_all_records()
+    return pd.DataFrame(data)
+
+# Optional: manual refresh button to clear cache
+def _clear_inventory_cache():
+    load_inventory.clear()
+
+# Open Orders sheet (write only on submit, so it's fine)
 orders_sheet = client.open_by_key(sheet_key).worksheet("Orders")
 
-# Load inventory data
-data = inventory_sheet.get_all_records()
-df = pd.DataFrame(data)
+# Load inventory data (cached)
+df = load_inventory(sheet_key)
 
 # --- Style ---
 st.markdown(
@@ -63,8 +72,10 @@ if "page" not in st.session_state:
     st.session_state.page = 1
 if "jump_to_price" not in st.session_state:
     st.session_state.jump_to_price = False
-# Sorting option (read early so it affects data before grid even though UI is below)
-sort_option = st.session_state.get("sort_option", "Tanpa urutan")
+if "sort_option" not in st.session_state:
+    st.session_state.sort_option = "Tanpa urutan"
+if "page_jump" not in st.session_state:
+    st.session_state.page_jump = 1
 
 with st.container():
     # Header
@@ -75,6 +86,9 @@ with st.container():
         unsafe_allow_html=True
     )
 
+    # Top actions (optional): reload cache
+    st.button("Reload Data", on_click=_clear_inventory_cache, help="Paksa refresh inventory dari Google Sheets")
+
     # =========================================================
     # FILTERS (Category + Search)
     # =========================================================
@@ -83,7 +97,8 @@ with st.container():
     seen = set(); categories = []
     for c in raw_categories:
         if c not in seen:
-            categories.append(c); seen.add(c)
+            categories.append(c)
+            seen.add(c)
     categories = ["Semua Kategori"] + categories
 
     selected_category = st.selectbox("Pilih Kategori", categories, index=0)
@@ -101,17 +116,15 @@ with st.container():
         q = search_query.strip().lower()
         df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
 
-    # Sorting based on session state (UI is rendered below the grid)
-    # Make sure Price numeric for sorting
+    # Sorting (applied before pagination)
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
-
-    if sort_option == "Harga Terendah":
+    if st.session_state.sort_option == "Harga Terendah":
         df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=True, kind="stable")
-    elif sort_option == "Harga Tertinggi":
+    elif st.session_state.sort_option == "Harga Tertinggi":
         df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=False, kind="stable")
-    elif sort_option == "Nama A-Z":
+    elif st.session_state.sort_option == "Nama A-Z":
         df_filtered = df_filtered.sort_values(by="ItemName", key=lambda s: s.str.lower(), kind="stable")
-    # "Tanpa urutan" -> keep original order
+    # "Tanpa urutan" -> keep original order from sheet
 
     # Jika tidak ada hasil
     if df_filtered.empty:
@@ -124,8 +137,11 @@ with st.container():
     page_size = 6
     total_items = len(df_filtered)
     total_pages = max(1, math.ceil(total_items / page_size))
+
+    # Clamp current page within range
     st.session_state.page = min(max(1, st.session_state.page), total_pages)
 
+    # Prev/next controls
     col_prev, col_info, col_next = st.columns([1, 2, 1])
     with col_prev:
         if st.button("⟵ Prev", disabled=(st.session_state.page <= 1)):
@@ -140,6 +156,19 @@ with st.container():
         if st.button("Next ⟶", disabled=(st.session_state.page >= total_pages)):
             st.session_state.page += 1
             st.rerun()
+
+    # Jump to page (instant — no Go button)
+    st.session_state.page_jump = st.number_input(
+        "Lompat ke halaman",
+        min_value=1,
+        max_value=total_pages,
+        value=st.session_state.page,
+        step=1,
+        key="page_jump"
+    )
+    if st.session_state.page != int(st.session_state.page_jump):
+        st.session_state.page = int(st.session_state.page_jump)
+        st.rerun()
 
     start = (st.session_state.page - 1) * page_size
     end = start + page_size
@@ -179,29 +208,15 @@ with st.container():
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORTING + PAGE JUMP CONTROLS (displayed BELOW grid)
+    # SORTING CONTROLS (below grid, affects next rerun)
     # =========================================================
-    st.write("")
-    col_sort, col_jump = st.columns([2, 1])
-    with col_sort:
-        st.selectbox(
-            "Urutkan",
-            ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
-            key="sort_option",
-            index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(sort_option),
-            help="Pilih cara mengurutkan katalog. Default tidak diurutkan."
-        )
-    with col_jump:
-        page_jump = st.number_input(
-            "Lompat ke halaman",
-            min_value=1,
-            max_value=total_pages,
-            value=st.session_state.page,
-            step=1
-        )
-        if st.button("Go"):
-            st.session_state.page = int(page_jump)
-            st.rerun()
+    st.selectbox(
+        "Urutkan",
+        ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
+        key="sort_option",
+        index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
+        help="Pilih cara mengurutkan katalog. Default tidak diurutkan."
+    )
 
     # =========================================================
     # Smooth scroll to price after pick (OUTSIDE grid loop)
