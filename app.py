@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import json
+import math
 
 # --- Google Sheets API setup ---
 scope = [
@@ -60,67 +61,180 @@ st.markdown(
         left: 0;
         bottom: 0;
         width: 100%;
-        background-color: #f0f6ff;  /* same light blue as form box */
+        background-color: #f0f6ff;
         color: #222;
         padding: 10px;
         font-size: 12px;
         border-top: 1px solid #cce0ff;
     }
+
+    /* sticky filter bar */
+    .filter-bar { position: sticky; top: 0; z-index: 999; background: white; padding: 8px 0 6px; border-bottom: 1px solid #eee; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ----- Category safety: kalau kolom belum ada, isi 'Uncategorized'
+# ----- Column safety: ensure Category & ImageURL exist -----
 if "Category" not in df.columns:
     df["Category"] = "Uncategorized"
+if "ImageURL" not in df.columns:
+    df["ImageURL"] = ""
 
 with st.container():
+    # Header
     st.image("banner.jpg", use_container_width=True)
     st.title(" Lis Live Discount Form")
-    st.markdown(f'<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>', unsafe_allow_html=True)
-
-    name = st.text_input("Nama Kamu")
-    wa_number = st.text_input("Nomor WhatsApp", placeholder = "0891234567788")
-    address = st.text_area(
-        "Alamat Lengkap", 
-        placeholder="Contoh: Jl. Medan Merdeka Utara No. 3, Kel. Gambir, Kec. Gambir, Kota Jakarta Pusat, DKI Jakarta 10110"
+    st.markdown(
+        '<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>',
+        unsafe_allow_html=True
     )
-    
-    st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
-    
-       # ====== CATEGORY FILTER (di atas item)
-    categories = sorted([c for c in df["Category"].dropna().unique().tolist()])
+
+    # =========================================================
+    # FILTER BAR: Category + Search + Page Size (sticky)
+    # =========================================================
+    st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
+
+    # Category (maintain original order from sheet)
+    raw_categories = df["Category"].dropna().tolist()
+    seen = set()
+    categories = []
+    for c in raw_categories:
+        if c not in seen:
+            categories.append(c)
+            seen.add(c)
     categories = ["Semua Kategori"] + categories
 
     selected_category = st.selectbox("Pilih Kategori", categories, index=0)
 
+    # Search (case-insensitive)
+    search_query = st.text_input("Cari item (nama mengandung kata ini)", placeholder="Contoh: nendoroid, klee, figma ...")
+
+    # Page size
+    page_size = st.selectbox("Tampilkan per halaman", [12, 24, 36], index=0)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # =========================================================
+    # FILTERING
+    # =========================================================
     if selected_category == "Semua Kategori":
         df_filtered = df.copy()
     else:
         df_filtered = df[df["Category"] == selected_category].copy()
 
-    # Kalau kategori tidak punya item
+    if search_query.strip():
+        q = search_query.strip().lower()
+        df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
+
+    # Jika tidak ada hasil
     if df_filtered.empty:
-        st.warning("Belum ada item untuk kategori ini.")
+        st.info("Tidak ada item yang cocok dengan filter saat ini.")
         st.stop()
 
-    st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
-    item_names = df_filtered["ItemName"].tolist()
-    selected_item = st.selectbox("Pilih Item", item_names)
+    # =========================================================
+    # PAGINATION STATE
+    # =========================================================
+    if "selected_item" not in st.session_state:
+        st.session_state.selected_item = None
+    if "page" not in st.session_state:
+        st.session_state.page = 1
 
-    # Ambil baris item terpilih
-    row = df_filtered.loc[df_filtered["ItemName"] == selected_item].iloc[0]
-    price = float(row["Price"])
-    item_category = row["Category"]  # simpan kategori item terpilih
-    
+    total_items = len(df_filtered)
+    total_pages = max(1, math.ceil(total_items / page_size))
+    st.session_state.page = min(max(1, st.session_state.page), total_pages)
+
+    # Pagination controls
+    col_prev, col_info, col_next = st.columns([1, 2, 1], vertical_alignment="center")
+    with col_prev:
+        if st.button("⟵ Prev", disabled=(st.session_state.page <= 1)):
+            st.session_state.page -= 1
+            st.rerun()
+    with col_info:
+        st.markdown(
+            f"<div style='text-align:center'>Halaman {st.session_state.page} dari {total_pages} &middot; {total_items} item</div>",
+            unsafe_allow_html=True
+        )
+    with col_next:
+        if st.button("Next ⟶", disabled=(st.session_state.page >= total_pages)):
+            st.session_state.page += 1
+            st.rerun()
+
+    start = (st.session_state.page - 1) * page_size
+    end = start + page_size
+    page_df = df_filtered.iloc[start:end].reset_index(drop=True)
+
+    # =========================================================
+    # PRODUCT GRID (3 columns desktop-ish)
+    # =========================================================
+    num_cols = 3
+    rows = math.ceil(len(page_df) / num_cols)
+
+    for r in range(rows):
+        cols = st.columns(num_cols, vertical_alignment="top")
+        for c in range(num_cols):
+            idx = r * num_cols + c
+            if idx >= len(page_df):
+                continue
+            rec = page_df.iloc[idx]
+
+            with cols[c]:
+                # Image (placeholder if empty)
+                img_url = str(rec.get("ImageURL", "") or "").strip()
+                if img_url:
+                    st.image(img_url, use_container_width=True)
+                else:
+                    st.markdown(
+                        "<div style='width:100%;aspect-ratio:1/1;background:#f7f7fb;display:flex;align-items:center;justify-content:center;border-radius:10px;color:#777;'>No Image</div>",
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown(f"**{rec['ItemName']}**")
+                st.markdown(f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>", unsafe_allow_html=True)
+
+                if st.button("Pilih", key=f"choose_{start+idx}"):
+                    st.session_state.selected_item = rec["ItemName"]
+                    st.toast(f"Item dipilih: {st.session_state.selected_item}")
+
+    # =========================================================
+    # PRICE + DISCOUNT (after selection)
+    # =========================================================
+    # fallback ke item pertama di halaman jika belum ada pilihan
+    if not st.session_state.selected_item:
+        st.session_state.selected_item = page_df.iloc[0]["ItemName"]
+
+    sel_row = df[df["ItemName"] == st.session_state.selected_item].iloc[0]
+    selected_item = sel_row["ItemName"]
+    price = float(sel_row["Price"])
+
+    st.write("---")
+    st.subheader("Detail Harga")
+    st.caption("Item yang dipilih akan muncul di sini. Kamu bisa ganti pilihan dari katalog di atas.")
+    st.write(f"**Item:** {selected_item}")
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
     discount = st.selectbox("Dapet Discount Berapa % di Live?", [20, 25, 30, 35, 40])
     final_price = price * (1 - discount / 100)
-    
-    st.markdown(f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>',
+        unsafe_allow_html=True
+    )
 
+    # =========================================================
+    # BUYER FORM
+    # =========================================================
+    st.subheader("Data Pembeli")
+    name = st.text_input("Nama Kamu")
+    wa_number = st.text_input("Nomor WhatsApp", placeholder="0891234567788")
+    address = st.text_area(
+        "Alamat Lengkap",
+        placeholder="Contoh: Jl. Medan Merdeka Utara No. 3, Kel. Gambir, Kec. Gambir, Kota Jakarta Pusat, DKI Jakarta 10110"
+    )
+    st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
+
+    # =========================================================
+    # SUBMIT
+    # =========================================================
     if st.button("Submit Order"):
         if not name.strip() or not wa_number.strip() or not address.strip():
             st.error("Tolong isi Nama Kamu, Nomor WhatsApp, dan Alamat Lengkap.")
@@ -130,6 +244,8 @@ with st.container():
             tz = pytz.timezone("Asia/Jakarta")
             current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
+            # Orders header expected:
+            # Time | Name | WhatsApp | Address | Item | Price | Discount | FinalPrice
             orders_sheet.append_row([
                 current_time,
                 name,
@@ -140,17 +256,17 @@ with st.container():
                 discount,
                 final_price
             ])
-            
+
             st.success("Order submitted! Please follow the instructions below to pay.")
 
-            st.markdown("""
-            ## Instruski Pembayaran 
+            st.markdown(f"""
+            ## Instruksi Pembayaran
             Transfer ke: **BCA 2530244574 a/n PT. Licht Cahaya Abadi**  
             Mohon cantumkan note:
-            - `"Pembayaran atas nama {0}"` 
+            - `"Pembayaran atas nama {name}"`
 
             Setelah transfer, harap konfirmasi via WhatsApp: **+62 819-5255-5657**
-            """.format(name))
+            """)
 
             st.write("---")
             st.subheader("Order Summary")
@@ -164,13 +280,13 @@ with st.container():
 
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
-    """
-    <div class="footer footer-desktop">
-        &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
-    </div>
-    <div class="footer footer-mobile">
-        Follow @lishobbystore on Instagram for more promos!
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+        """
+        <div class="footer footer-desktop">
+            &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
+        </div>
+        <div class="footer footer-mobile">
+            Follow @lishobbystore on Instagram for more promos!
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
