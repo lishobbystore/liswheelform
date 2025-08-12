@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 import json
 import math
+import streamlit.components.v1 as components  # for smooth scroll
 
 # --- Google Sheets API setup ---
 scope = [
@@ -91,7 +92,7 @@ with st.container():
     )
 
     # =========================================================
-    # FILTER BAR: Category + Search + Page Size (sticky)
+    # FILTER BAR: Category + Search (sticky)
     # =========================================================
     st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
 
@@ -109,9 +110,6 @@ with st.container():
 
     # Search (case-insensitive)
     search_query = st.text_input("Cari item (nama mengandung kata ini)", placeholder="Contoh: nendoroid, klee, figma ...")
-
-    # Page size
-    page_size = st.selectbox("Tampilkan per halaman", [12, 24, 36], index=0)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -133,13 +131,16 @@ with st.container():
         st.stop()
 
     # =========================================================
-    # PAGINATION STATE
+    # PAGINATION STATE (page size fixed = 6)
     # =========================================================
     if "selected_item" not in st.session_state:
         st.session_state.selected_item = None
     if "page" not in st.session_state:
         st.session_state.page = 1
+    if "jump_to_price" not in st.session_state:
+        st.session_state.jump_to_price = False
 
+    page_size = 6  # << fixed
     total_items = len(df_filtered)
     total_pages = max(1, math.ceil(total_items / page_size))
     st.session_state.page = min(max(1, st.session_state.page), total_pages)
@@ -194,11 +195,30 @@ with st.container():
 
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
+                    st.session_state.jump_to_price = True  # trigger smooth scroll
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
+
+    # =========================================================
+    # Smooth scroll to price after pick
+    # =========================================================
+    if st.session_state.jump_to_price:
+        components.html(
+            """
+            <script>
+            const el = window.parent.document.getElementById("price-section");
+            if (el) { el.scrollIntoView({behavior:"smooth", block:"start"}); }
+            </script>
+            """,
+            height=0,
+        )
+        st.session_state.jump_to_price = False
 
     # =========================================================
     # PRICE + DISCOUNT (after selection)
     # =========================================================
+    # anchor for scrolling
+    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
+
     # fallback ke item pertama di halaman jika belum ada pilihan
     if not st.session_state.selected_item:
         st.session_state.selected_item = page_df.iloc[0]["ItemName"]
@@ -208,7 +228,6 @@ with st.container():
     price = float(sel_row["Price"])
 
     st.write("---")
-    st.subheader("Detail Harga")
     st.caption("Item yang dipilih akan muncul di sini. Kamu bisa ganti pilihan dari katalog di atas.")
     st.write(f"**Item:** {selected_item}")
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
