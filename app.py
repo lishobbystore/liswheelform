@@ -4,7 +4,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
 import pytz
-import json
 import math
 import streamlit.components.v1 as components  # for smooth scroll
 
@@ -28,7 +27,7 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
 def _clear_inventory_cache():
     load_inventory.clear()
 
-# Open Orders sheet (write only on submit)
+# Orders sheet (write only on submit)
 orders_sheet = client.open_by_key(sheet_key).worksheet("Orders")
 
 # Load inventory data (cached)
@@ -42,17 +41,31 @@ st.markdown(
 
     .footer-desktop { display: block; text-align: center; }
     .footer-mobile { display: none; }
-
-    @media (max-width: 768px) {
-        .footer-desktop { display: none; }
-        .footer-mobile { display: block; text-align: left; }
-    }
-
+    @media (max-width: 768px) { .footer-desktop { display: none; } .footer-mobile { display: block; text-align: left; } }
     .footer {
         position: fixed; left: 0; bottom: 0; width: 100%;
         background-color: #f0f6ff; color: #222; padding: 10px;
         font-size: 12px; border-top: 1px solid #cce0ff;
     }
+
+    /* Product card layout */
+    .p-card{
+      border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px;
+      height:100%; display:flex; flex-direction:column; gap:8px;
+      background:rgba(255,255,255,0.02);
+    }
+    .p-card .imgwrap{
+      width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden;
+      background:#0f1116; display:flex; align-items:center; justify-content:center;
+    }
+    .p-card .imgwrap img{ width:100%; height:100%; object-fit:contain; }
+    .p-card .name{
+      font-weight:600; font-size:14px; line-height:1.3;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+      overflow:hidden; min-height: calc(1.3em * 2); /* lock to 2 lines */
+    }
+    .p-card .price-row{ margin-top:auto; }
+    .p-card .price-tag{ font-size:16px; font-weight:700; }
     </style>
     """,
     unsafe_allow_html=True
@@ -73,6 +86,14 @@ if "jump_to_price" not in st.session_state:
     st.session_state.jump_to_price = False
 if "sort_option" not in st.session_state:
     st.session_state.sort_option = "Tanpa urutan"
+if "selected_category" not in st.session_state:
+    st.session_state.selected_category = "Semua Kategori"
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+
+# Helper: reset page to 1 on filter changes
+def reset_page():
+    st.session_state.page = 1
 
 with st.container():
     # Header
@@ -82,9 +103,6 @@ with st.container():
         '<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>',
         unsafe_allow_html=True
     )
-
-    # Optional: manual refresh inventory cache
-    st.button("Reload Data", on_click=_clear_inventory_cache, help="Paksa refresh inventory dari Google Sheets")
 
     # =========================================================
     # FILTERS (Category + Search)
@@ -97,8 +115,20 @@ with st.container():
             categories.append(c); seen.add(c)
     categories = ["Semua Kategori"] + categories
 
-    selected_category = st.selectbox("Pilih Kategori", categories, index=0)
-    search_query = st.text_input("Cari item (nama mengandung kata ini)", placeholder="Contoh: nendoroid, klee, figma ...")
+    selected_category = st.selectbox(
+        "Pilih Kategori",
+        categories,
+        index=categories.index(st.session_state.selected_category) if st.session_state.selected_category in categories else 0,
+        key="selected_category",
+        on_change=reset_page
+    )
+    search_query = st.text_input(
+        "Cari item (nama mengandung kata ini)",
+        value=st.session_state.search_query,
+        placeholder="Contoh: nendoroid, klee, figma ...",
+        key="search_query",
+        on_change=reset_page
+    )
 
     # =========================================================
     # FILTERING + SORTING
@@ -120,9 +150,8 @@ with st.container():
         df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=False, kind="stable")
     elif st.session_state.sort_option == "Nama A-Z":
         df_filtered = df_filtered.sort_values(by="ItemName", key=lambda s: s.str.lower(), kind="stable")
-    # "Tanpa urutan" -> keep original order
+    # "Tanpa urutan" -> original order
 
-    # Jika tidak ada hasil
     if df_filtered.empty:
         st.info("Tidak ada item yang cocok dengan filter saat ini.")
         st.stop()
@@ -155,7 +184,7 @@ with st.container():
     page_df = df_filtered.iloc[start:end].reset_index(drop=True)
 
     # =========================================================
-    # PRODUCT GRID (3 columns desktop-ish)
+    # PRODUCT GRID (3 columns)
     # =========================================================
     num_cols = 3
     rows = math.ceil(len(page_df) / num_cols)
@@ -168,38 +197,47 @@ with st.container():
                 continue
             rec = page_df.iloc[idx]
 
-            with cols[c]:
-                # Image (placeholder file if empty)
-                img_url = str(rec.get("ImageURL", "") or "").strip()
-                if img_url:
-                    st.image(img_url, use_container_width=True)
-                else:
-                    st.image("no_image.png", use_container_width=True)  # local placeholder
+            img_url = str(rec.get("ImageURL", "") or "").strip()
+            if not img_url:
+                img_url = "no_image.png"  # local placeholder
 
-                st.markdown(f"**{rec['ItemName']}**")
+            with cols[c]:
+                # HTML card for consistent layout
                 st.markdown(
-                    f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>",
+                    f"""
+                    <div class="p-card">
+                      <div class="imgwrap">
+                        <img src="{img_url}" alt="product" />
+                      </div>
+                      <div class="name">{rec['ItemName']}</div>
+                      <div class="price-row"><div class="price-tag">Rp {float(rec['Price']):,.0f}</div></div>
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
-
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
-                    st.session_state.jump_to_price = True  # trigger smooth scroll
+                    st.session_state.jump_to_price = True
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORTING CONTROL (below grid; affects next rerun)
+    # SORT + RELOAD (side by side, below grid)
     # =========================================================
-    st.selectbox(
-        "Urutkan",
-        ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
-        key="sort_option",
-        index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
-        help="Pilih cara mengurutkan katalog. Default tidak diurutkan."
-    )
+    col_sort, col_reload = st.columns([3, 1])
+    with col_sort:
+        st.selectbox(
+            "Urutkan",
+            ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
+            key="sort_option",
+            index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
+            on_change=reset_page,
+            help="Pilih cara mengurutkan katalog."
+        )
+    with col_reload:
+        st.button("Reload Data", on_click=_clear_inventory_cache, help="Paksa refresh dari Google Sheets")
 
     # =========================================================
-    # Smooth scroll to price after pick (OUTSIDE grid loop)
+    # Smooth scroll to price after pick
     # =========================================================
     if st.session_state.jump_to_price:
         components.html(
@@ -214,12 +252,10 @@ with st.container():
         st.session_state.jump_to_price = False
 
     # =========================================================
-    # PRICE + DISCOUNT (OUTSIDE grid loop)
+    # PRICE + DISCOUNT
     # =========================================================
-    # anchor for scrolling
     st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
 
-    # fallback ke item pertama di halaman jika belum ada pilihan
     if not st.session_state.selected_item:
         st.session_state.selected_item = page_df.iloc[0]["ItemName"]
 
@@ -297,7 +333,7 @@ with st.container():
             st.write(f"**Discount:** {discount}%")
             st.write(f"**Final Price:** Rp {final_price:,.0f}")
 
-# Footer (outside container)
+# Footer
 st.markdown(
     """
     <div class="footer footer-desktop">
