@@ -6,8 +6,7 @@ from datetime import datetime
 import pytz
 import math
 import streamlit.components.v1 as components  # for smooth scroll
-from pathlib import Path
-import base64
+from urllib.parse import quote
 
 # --- Google Sheets API setup ---
 scope = [
@@ -19,16 +18,13 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# Prepare base64 data-URI for local placeholder (so <img> always works)
-def _load_placeholder_data_uri() -> str:
-    p = Path(__file__).with_name("no_image.png")
-    if p.exists():
-        b = p.read_bytes()
-        return "data:image/png;base64," + base64.b64encode(b).decode("ascii")
-    # Fallback 1x1 transparent PNG
-    return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
-
-PLACEHOLDER_DATA_URI = _load_placeholder_data_uri()
+# Ultra-light inline placeholder (no file I/O, instant render)
+PLACEHOLDER_SVG = "data:image/svg+xml;utf8," + quote("""
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'>
+  <rect width='100%' height='100%' fill='#0f1116'/>
+  <text x='50%' y='52%' fill='#9aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text>
+</svg>
+""")
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
@@ -36,10 +32,9 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
     ws = client.open_by_key(_sheet_key).worksheet("Inventory")
     data = ws.get_all_records()
     df_local = pd.DataFrame(data)
-    # Column safety
+    # Column safety & normalization
     if "Category" not in df_local.columns:
         df_local["Category"] = "Uncategorized"
-    # Normalize ImageURL (avoid NaN/None and stray spaces)
     if "ImageURL" not in df_local.columns:
         df_local["ImageURL"] = ""
     else:
@@ -68,16 +63,11 @@ st.markdown(
     }
 
     /* Product card */
-    .p-card {
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      padding: 12px;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      background: rgba(255,255,255,0.03);
-      margin-bottom: 12px; /* extra space for the button */
+    .p-card{
+      border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:12px;
+      height:100%; display:flex; flex-direction:column; gap:10px;
+      background:rgba(255,255,255,0.03);
+      margin-bottom:16px; /* space for the button below */
     }
     .p-card .imgwrap{
       width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden;
@@ -92,7 +82,7 @@ st.markdown(
     .p-card .price-row{ margin-top:auto; }
     .p-card .price-tag{ font-size:16px; font-weight:700; }
 
-    /* Make the Streamlit button look aligned to the card width */
+    /* Make Streamlit button match card width */
     .stButton > button{
       width:100%; border-radius:10px; padding:6px 10px;
     }
@@ -148,7 +138,7 @@ with st.container():
     search_query = st.text_input(
         "Cari item (nama mengandung kata ini)",
         value=st.session_state.search_query,
-        placeholder="Contoh: zhongli, miku, figma ...",
+        placeholder="Contoh: nendoroid, klee, figma ...",
         key="search_query",
         on_change=reset_page
     )
@@ -163,9 +153,9 @@ with st.container():
 
     if search_query.strip():
         q = search_query.strip().lower()
-        df_filtered = df_filtered[df_filtered["ItemName"]].str.lower().str.contains(q, na=False)
+        df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
 
-    # Sorting (applied before pagination)
+    # Sorting
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
     if st.session_state.sort_option == "Harga Terendah":
         df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=True, kind="stable")
@@ -207,33 +197,31 @@ with st.container():
     page_df = df_filtered.iloc[start:end].reset_index(drop=True)
 
     # =========================================================
-    # PRODUCT GRID (3 columns)
+    # PRODUCT GRID (3 columns) — optimized
     # =========================================================
     num_cols = 3
-    rows = math.ceil(len(page_df) / num_cols)
+    records = page_df.to_dict("records")
+    rows = math.ceil(len(records) / num_cols)
 
     for r in range(rows):
         cols = st.columns(num_cols)
         for c in range(num_cols):
             idx = r * num_cols + c
-            if idx >= len(page_df):
+            if idx >= len(records):
                 continue
-            rec = page_df.iloc[idx]
+            rec = records[idx]
 
-            # Safe image URL with guaranteed placeholder data-URI
-            val = str(rec.get("ImageURL", "") or "").strip().lower()
-            if val.startswith("http://") or val.startswith("https://") or val.startswith("data:"):
-                img_src = rec["ImageURL"]
-            else:
-                img_src = PLACEHOLDER_DATA_URI
+            # Fast image source: use URL if http(s)/data, else inline SVG placeholder
+            raw = str(rec.get("ImageURL", "") or "").strip()
+            low = raw.lower()
+            img_src = raw if (low.startswith("http://") or low.startswith("https://") or low.startswith("data:")) else PLACEHOLDER_SVG
 
             with cols[c]:
-                # Card HTML
                 st.markdown(
                     f"""
                     <div class="p-card">
                       <div class="imgwrap">
-                        <img src="{img_src}" alt="product" />
+                        <img src="{img_src}" alt="product" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
                       </div>
                       <div class="name">{rec['ItemName']}</div>
                       <div class="price-row"><div class="price-tag">Rp {float(rec['Price']):,.0f}</div></div>
@@ -241,14 +229,13 @@ with st.container():
                     """,
                     unsafe_allow_html=True
                 )
-                # Button right under card (aligned width via CSS)
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORT (Reload removed)
+    # SORT (no reload button)
     # =========================================================
     st.selectbox(
         "Urutkan",
