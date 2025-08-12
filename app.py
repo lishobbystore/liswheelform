@@ -13,13 +13,9 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-
-# Get creds from secrets
 service_account_info = st.secrets["gcp_service_account"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
 client = gspread.authorize(creds)
-
-# Get sheet key from secrets
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
 # Open your Google Sheets
@@ -49,30 +45,26 @@ st.markdown(
         background-color: #f0f6ff; color: #222; padding: 10px;
         font-size: 12px; border-top: 1px solid #cce0ff;
     }
-
-    /* sticky filter bar */
-    .filter-bar {
-        position: sticky; top: 0; z-index: 999; background: white;
-        padding: 8px 0 6px; border-bottom: 1px solid #eee;
-    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ----- Column safety: ensure Category & ImageURL exist -----
+# ----- Column safety -----
 if "Category" not in df.columns:
     df["Category"] = "Uncategorized"
 if "ImageURL" not in df.columns:
     df["ImageURL"] = ""
 
-# ----- Session state -----
+# ----- Session state defaults -----
 if "selected_item" not in st.session_state:
     st.session_state.selected_item = None
 if "page" not in st.session_state:
     st.session_state.page = 1
 if "jump_to_price" not in st.session_state:
     st.session_state.jump_to_price = False
+# Sorting option (read early so it affects data before grid even though UI is below)
+sort_option = st.session_state.get("sort_option", "Tanpa urutan")
 
 with st.container():
     # Header
@@ -84,29 +76,21 @@ with st.container():
     )
 
     # =========================================================
-    # FILTER BAR: Category + Search (sticky)
+    # FILTERS (Category + Search)
     # =========================================================
-    st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
-
     # Category (keep original order from sheet)
     raw_categories = df["Category"].dropna().tolist()
-    seen = set()
-    categories = []
+    seen = set(); categories = []
     for c in raw_categories:
         if c not in seen:
-            categories.append(c)
-            seen.add(c)
+            categories.append(c); seen.add(c)
     categories = ["Semua Kategori"] + categories
 
     selected_category = st.selectbox("Pilih Kategori", categories, index=0)
-
-    # Search (case-insensitive)
     search_query = st.text_input("Cari item (nama mengandung kata ini)", placeholder="Contoh: nendoroid, klee, figma ...")
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
     # =========================================================
-    # FILTERING
+    # FILTERING + SORTING
     # =========================================================
     if selected_category == "Semua Kategori":
         df_filtered = df.copy()
@@ -116,6 +100,18 @@ with st.container():
     if search_query.strip():
         q = search_query.strip().lower()
         df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
+
+    # Sorting based on session state (UI is rendered below the grid)
+    # Make sure Price numeric for sorting
+    df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
+
+    if sort_option == "Harga Terendah":
+        df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=True, kind="stable")
+    elif sort_option == "Harga Tertinggi":
+        df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=False, kind="stable")
+    elif sort_option == "Nama A-Z":
+        df_filtered = df_filtered.sort_values(by="ItemName", key=lambda s: s.str.lower(), kind="stable")
+    # "Tanpa urutan" -> keep original order
 
     # Jika tidak ada hasil
     if df_filtered.empty:
@@ -181,6 +177,31 @@ with st.container():
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True  # trigger smooth scroll
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
+
+    # =========================================================
+    # SORTING + PAGE JUMP CONTROLS (displayed BELOW grid)
+    # =========================================================
+    st.write("")
+    col_sort, col_jump = st.columns([2, 1])
+    with col_sort:
+        st.selectbox(
+            "Urutkan",
+            ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
+            key="sort_option",
+            index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(sort_option),
+            help="Pilih cara mengurutkan katalog. Default tidak diurutkan."
+        )
+    with col_jump:
+        page_jump = st.number_input(
+            "Lompat ke halaman",
+            min_value=1,
+            max_value=total_pages,
+            value=st.session_state.page,
+            step=1
+        )
+        if st.button("Go"):
+            st.session_state.page = int(page_jump)
+            st.rerun()
 
     # =========================================================
     # Smooth scroll to price after pick (OUTSIDE grid loop)
@@ -282,7 +303,7 @@ with st.container():
             st.write(f"**Discount:** {discount}%")
             st.write(f"**Final Price:** Rp {final_price:,.0f}")
 
-# Footer (di luar container)
+# Footer (outside container)
 st.markdown(
     """
     <div class="footer footer-desktop">
