@@ -138,7 +138,7 @@ with st.container():
     search_query = st.text_input(
         "Cari item (nama mengandung kata ini)",
         value=st.session_state.search_query,
-        placeholder="Contoh: nendoroid, klee, figma ...",
+        placeholder="Contoh: Miku, zhongli, figma ...",
         key="search_query",
         on_change=reset_page
     )
