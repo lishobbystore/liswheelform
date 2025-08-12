@@ -7,12 +7,6 @@ import pytz
 import math
 import streamlit.components.v1 as components  # for smooth scroll
 
-# ------------------------
-# CONFIG: placeholder mode
-# ------------------------
-USE_SVG_PLACEHOLDER = True  # << set to False if you insist on local no_image.png
-PLACEHOLDER_LOCAL_FILE = "no_image.png"
-
 # --- Google Sheets API setup ---
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -23,19 +17,14 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# === Placeholder source ===
-if USE_SVG_PLACEHOLDER:
-    # tiny, instant SVG (no I/O, no network)
-    PLACEHOLDER_SRC = (
-        "data:image/svg+xml;utf8,"
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'>"
-        "<rect width='100%' height='100%' fill='#0f1116'/>"
-        "<text x='50%' y='52%' fill='#9aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text>"
-        "</svg>"
-    )
-else:
-    # rely on local file (ensure the file exists next to this script)
-    PLACEHOLDER_SRC = PLACEHOLDER_LOCAL_FILE
+# === Ultra-light inline SVG placeholder (no I/O, instant) ===
+PLACEHOLDER_SVG = (
+    "data:image/svg+xml;utf8,"
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'>"
+    "<rect width='100%' height='100%' fill='#0f1116'/>"
+    "<text x='50%' y='52%' fill='#9aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text>"
+    "</svg>"
+)
 
 def to_direct_img(url: str) -> str:
     """Convert Google Drive 'file/d/<id>/view' to direct 'uc?export=view&id=<id>'."""
@@ -61,7 +50,6 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
         df_local["ImageURL"] = ""
     else:
         df_local["ImageURL"] = df_local["ImageURL"].fillna("").astype(str).str.strip()
-        # Fix Google Drive viewer links to direct images
         df_local["ImageURL"] = df_local["ImageURL"].apply(to_direct_img)
     return df_local
 
@@ -235,9 +223,10 @@ with st.container():
                 continue
             rec = records[idx]
 
-            # Use URL if present (already fixed if Drive), else placeholder source
+            # Use URL if present (http/https/data), else inline SVG placeholder
             raw = str(rec.get("ImageURL", "") or "").strip()
-            img_src = raw if raw else PLACEHOLDER_SRC
+            low = raw.lower()
+            img_src = raw if (low.startswith("http://") or low.startswith("https://") or low.startswith("data:")) else PLACEHOLDER_SVG
 
             with cols[c]:
                 st.markdown(
