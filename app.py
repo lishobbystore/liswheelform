@@ -165,9 +165,6 @@ with st.container():
     end = start + page_size
     page_df = df_filtered.iloc[start:end].reset_index(drop=True)
 
-    # =========================================================
-    # PRODUCT GRID (3 columns desktop-ish)
-    # =========================================================
    # =========================================================
 # PRODUCT GRID (3 columns desktop-ish)
 # =========================================================
@@ -188,7 +185,7 @@ for r in range(rows):
             if img_url:
                 st.image(img_url, use_container_width=True)
             else:
-                st.image("no_image.jpg", use_container_width=True)  # <<-- local placeholder image
+                st.image("no_image.png", use_container_width=True)  # <<-- local placeholder image
 
             st.markdown(f"**{rec['ItemName']}**")
             st.markdown(f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>", unsafe_allow_html=True)
