@@ -18,7 +18,7 @@ client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
 # Local placeholder image (file must sit next to this script)
-PLACEHOLDER_LOCAL = "no_image.png"
+PLACEHOLDER_LOCAL = "static/no_image.png"
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
