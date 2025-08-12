@@ -94,7 +94,7 @@ with st.container():
     # =========================================================
     # FILTER BAR: Category + Search (sticky)
     # =========================================================
-    st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
+    #st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
 
     # Category (maintain original order from sheet)
     raw_categories = df["Category"].dropna().tolist()
