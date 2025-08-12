@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 import math
 import streamlit.components.v1 as components  # for smooth scroll
+from urllib.parse import quote
 
 # --- Google Sheets API setup ---
 scope = [
@@ -17,8 +18,13 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# Local placeholder image (file must sit next to this script)
-PLACEHOLDER_LOCAL = "no_image.png"
+# Ultra-light inline placeholder (no file I/O, instant render)
+PLACEHOLDER_SVG = "data:image/svg+xml;utf8," + quote("""
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'>
+  <rect width='100%' height='100%' fill='#0f1116'/>
+  <text x='50%' y='52%' fill='#9aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text>
+</svg>
+""")
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
@@ -205,9 +211,10 @@ with st.container():
                 continue
             rec = records[idx]
 
-            # Use URL if present, otherwise fallback to local file
+            # Fast image source: use URL if http(s)/data, else inline SVG placeholder
             raw = str(rec.get("ImageURL", "") or "").strip()
-            img_src = raw if raw else PLACEHOLDER_LOCAL
+            low = raw.lower()
+            img_src = raw if (low.startswith("http://") or low.startswith("https://") or low.startswith("data:")) else PLACEHOLDER_SVG
 
             with cols[c]:
                 st.markdown(
