@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 import math
 import streamlit.components.v1 as components  # for smooth scroll
+import base64, os
 
 # --- Google Sheets API setup ---
 scope = [
@@ -17,21 +18,17 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# === Placeholder from Google Drive (DIRECT image URL) ===
-# Original share link:
-# https://drive.google.com/file/d/14ywrlXkCFsX1QUHsPKJ0ZwP9EtBvel5Q/view?usp=sharing
-PLACEHOLDER_LOCAL = "https://drive.google.com/uc?export=view&id=14ywrlXkCFsX1QUHsPKJ0ZwP9EtBvel5Q"
+# === Local placeholder (read once, base64) ===
+def _load_placeholder_data_uri(local_path: str) -> str:
+    try:
+        with open(local_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        # Tiny inline SVG if file missing so UI never breaks
+        return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'><rect width='100%' height='100%' fill='%230f1116'/><text x='50%' y='52%' fill='%239aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text></svg>"
 
-def to_direct_img(url: str) -> str:
-    """Convert Google Drive 'file/d/<id>/view' to direct 'uc?export=view&id=<id>'."""
-    u = (url or "").strip()
-    if "drive.google.com/file/d/" in u:
-        try:
-            file_id = u.split("/file/d/")[1].split("/")[0]
-            return f"https://drive.google.com/uc?export=view&id={file_id}"
-        except Exception:
-            return u
-    return u
+PLACEHOLDER_DATA_URI = _load_placeholder_data_uri(os.path.join(os.path.dirname(__file__), "no_image.png"))
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
@@ -46,8 +43,6 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
         df_local["ImageURL"] = ""
     else:
         df_local["ImageURL"] = df_local["ImageURL"].fillna("").astype(str).str.strip()
-        # Convert Drive viewer links to direct image links
-        df_local["ImageURL"] = df_local["ImageURL"].apply(to_direct_img)
     return df_local
 
 # Orders sheet (write only on submit)
@@ -220,9 +215,9 @@ with st.container():
                 continue
             rec = records[idx]
 
-            # Use URL if present, otherwise fallback to Drive placeholder
+            # Use URL if present, otherwise fallback to base64 local placeholder
             raw = str(rec.get("ImageURL", "") or "").strip()
-            img_src = raw if raw else PLACEHOLDER_LOCAL
+            img_src = raw if raw else PLACEHOLDER_DATA_URI
 
             with cols[c]:
                 st.markdown(
