@@ -17,25 +17,8 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, s
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
-# === Ultra-light inline SVG placeholder (no I/O, instant) ===
-PLACEHOLDER_SVG = (
-    "data:image/svg+xml;utf8,"
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'>"
-    "<rect width='100%' height='100%' fill='#0f1116'/>"
-    "<text x='50%' y='52%' fill='#9aa4b2' font-size='32' text-anchor='middle' font-family='sans-serif'>NO IMAGE</text>"
-    "</svg>"
-)
-
-def to_direct_img(url: str) -> str:
-    """Convert Google Drive 'file/d/<id>/view' to direct 'uc?export=view&id=<id>'."""
-    u = (url or "").strip()
-    if "drive.google.com/file/d/" in u:
-        try:
-            file_id = u.split("/file/d/")[1].split("/")[0]
-            return f"https://drive.google.com/uc?export=view&id={file_id}"
-        except Exception:
-            return u
-    return u
+# Local placeholder image (file must sit next to this script)
+PLACEHOLDER_LOCAL = "no_image.png"
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
@@ -50,7 +33,6 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
         df_local["ImageURL"] = ""
     else:
         df_local["ImageURL"] = df_local["ImageURL"].fillna("").astype(str).str.strip()
-        df_local["ImageURL"] = df_local["ImageURL"].apply(to_direct_img)
     return df_local
 
 # Orders sheet (write only on submit)
@@ -223,10 +205,9 @@ with st.container():
                 continue
             rec = records[idx]
 
-            # Use URL if present (http/https/data), else inline SVG placeholder
+            # Use URL if present, otherwise fallback to local file
             raw = str(rec.get("ImageURL", "") or "").strip()
-            low = raw.lower()
-            img_src = raw if (low.startswith("http://") or low.startswith("https://") or low.startswith("data:")) else PLACEHOLDER_SVG
+            img_src = raw if raw else PLACEHOLDER_LOCAL
 
             with cols[c]:
                 st.markdown(
