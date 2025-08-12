@@ -34,43 +34,27 @@ df = pd.DataFrame(data)
 st.markdown(
     """
     <style>
-    .price {
-        font-size: 24px;
-        font-weight: bold; 
-    }
+    .price { font-size: 24px; font-weight: bold; }
 
-    .footer-desktop {
-        display: block;
-        text-align: center;
-    }
-    .footer-mobile {
-        display: none;
-    }
+    .footer-desktop { display: block; text-align: center; }
+    .footer-mobile { display: none; }
 
     @media (max-width: 768px) {
-        .footer-desktop {
-            display: none;
-        }
-        .footer-mobile {
-            display: block;
-            text-align: left;
-        }
+        .footer-desktop { display: none; }
+        .footer-mobile { display: block; text-align: left; }
     }
 
     .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: #f0f6ff;
-        color: #222;
-        padding: 10px;
-        font-size: 12px;
-        border-top: 1px solid #cce0ff;
+        position: fixed; left: 0; bottom: 0; width: 100%;
+        background-color: #f0f6ff; color: #222; padding: 10px;
+        font-size: 12px; border-top: 1px solid #cce0ff;
     }
 
     /* sticky filter bar */
-    .filter-bar { position: sticky; top: 0; z-index: 999; background: white; padding: 8px 0 6px; border-bottom: 1px solid #eee; }
+    .filter-bar {
+        position: sticky; top: 0; z-index: 999; background: white;
+        padding: 8px 0 6px; border-bottom: 1px solid #eee;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -81,6 +65,14 @@ if "Category" not in df.columns:
     df["Category"] = "Uncategorized"
 if "ImageURL" not in df.columns:
     df["ImageURL"] = ""
+
+# ----- Session state -----
+if "selected_item" not in st.session_state:
+    st.session_state.selected_item = None
+if "page" not in st.session_state:
+    st.session_state.page = 1
+if "jump_to_price" not in st.session_state:
+    st.session_state.jump_to_price = False
 
 with st.container():
     # Header
@@ -94,9 +86,9 @@ with st.container():
     # =========================================================
     # FILTER BAR: Category + Search (sticky)
     # =========================================================
-    #st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
+    st.markdown('<div class="filter-bar">', unsafe_allow_html=True)
 
-    # Category (maintain original order from sheet)
+    # Category (keep original order from sheet)
     raw_categories = df["Category"].dropna().tolist()
     seen = set()
     categories = []
@@ -111,7 +103,7 @@ with st.container():
     # Search (case-insensitive)
     search_query = st.text_input("Cari item (nama mengandung kata ini)", placeholder="Contoh: nendoroid, klee, figma ...")
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================
     # FILTERING
@@ -131,22 +123,14 @@ with st.container():
         st.stop()
 
     # =========================================================
-    # PAGINATION STATE (page size fixed = 6)
+    # PAGINATION (fixed page size = 6)
     # =========================================================
-    if "selected_item" not in st.session_state:
-        st.session_state.selected_item = None
-    if "page" not in st.session_state:
-        st.session_state.page = 1
-    if "jump_to_price" not in st.session_state:
-        st.session_state.jump_to_price = False
-
-    page_size = 6  # << fixed
+    page_size = 6
     total_items = len(df_filtered)
     total_pages = max(1, math.ceil(total_items / page_size))
     st.session_state.page = min(max(1, st.session_state.page), total_pages)
 
-    # Pagination controls
-    col_prev, col_info, col_next = st.columns([1, 2, 1], vertical_alignment="center")
+    col_prev, col_info, col_next = st.columns([1, 2, 1])
     with col_prev:
         if st.button("⟵ Prev", disabled=(st.session_state.page <= 1)):
             st.session_state.page -= 1
@@ -165,38 +149,41 @@ with st.container():
     end = start + page_size
     page_df = df_filtered.iloc[start:end].reset_index(drop=True)
 
-   # =========================================================
-# PRODUCT GRID (3 columns desktop-ish)
-# =========================================================
-num_cols = 3
-rows = math.ceil(len(page_df) / num_cols)
+    # =========================================================
+    # PRODUCT GRID (3 columns desktop-ish)
+    # =========================================================
+    num_cols = 3
+    rows = math.ceil(len(page_df) / num_cols)
 
-for r in range(rows):
-    cols = st.columns(num_cols, vertical_alignment="top")
-    for c in range(num_cols):
-        idx = r * num_cols + c
-        if idx >= len(page_df):
-            continue
-        rec = page_df.iloc[idx]
+    for r in range(rows):
+        cols = st.columns(num_cols)
+        for c in range(num_cols):
+            idx = r * num_cols + c
+            if idx >= len(page_df):
+                continue
+            rec = page_df.iloc[idx]
 
-        with cols[c]:
-            # Image (placeholder file if empty)
-            img_url = str(rec.get("ImageURL", "") or "").strip()
-            if img_url:
-                st.image(img_url, use_container_width=True)
-            else:
-                st.image("no_image.png", use_container_width=True)  # <<-- local placeholder image
+            with cols[c]:
+                # Image (placeholder file if empty)
+                img_url = str(rec.get("ImageURL", "") or "").strip()
+                if img_url:
+                    st.image(img_url, use_container_width=True)
+                else:
+                    st.image("no_image.png", use_container_width=True)  # local placeholder
 
-            st.markdown(f"**{rec['ItemName']}**")
-            st.markdown(f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>", unsafe_allow_html=True)
+                st.markdown(f"**{rec['ItemName']}**")
+                st.markdown(
+                    f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>",
+                    unsafe_allow_html=True
+                )
 
-            if st.button("Pilih", key=f"choose_{start+idx}"):
-                st.session_state.selected_item = rec["ItemName"]
-                st.session_state.jump_to_price = True  # trigger smooth scroll
-                st.toast(f"Item dipilih: {st.session_state.selected_item}")
+                if st.button("Pilih", key=f"choose_{start+idx}"):
+                    st.session_state.selected_item = rec["ItemName"]
+                    st.session_state.jump_to_price = True  # trigger smooth scroll
+                    st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # Smooth scroll to price after pick
+    # Smooth scroll to price after pick (OUTSIDE grid loop)
     # =========================================================
     if st.session_state.jump_to_price:
         components.html(
@@ -211,7 +198,7 @@ for r in range(rows):
         st.session_state.jump_to_price = False
 
     # =========================================================
-    # PRICE + DISCOUNT (after selection)
+    # PRICE + DISCOUNT (OUTSIDE grid loop)
     # =========================================================
     # anchor for scrolling
     st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
@@ -225,6 +212,7 @@ for r in range(rows):
     price = float(sel_row["Price"])
 
     st.write("---")
+    st.subheader("Detail Harga")
     st.caption("Item yang dipilih akan muncul di sini. Kamu bisa ganti pilihan dari katalog di atas.")
     st.write(f"**Item:** {selected_item}")
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
@@ -294,15 +282,15 @@ for r in range(rows):
             st.write(f"**Discount:** {discount}%")
             st.write(f"**Final Price:** Rp {final_price:,.0f}")
 
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="footer footer-desktop">
-            &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
-        </div>
-        <div class="footer footer-mobile">
-            Follow @lishobbystore on Instagram for more promos!
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+# Footer (di luar container)
+st.markdown(
+    """
+    <div class="footer footer-desktop">
+        &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
+    </div>
+    <div class="footer footer-mobile">
+        Follow @lishobbystore on Instagram for more promos!
+    </div>
+    """,
+    unsafe_allow_html=True
+)
