@@ -18,11 +18,20 @@ client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
 
 # ----- Cached loader for Inventory (anti-429) -----
-@st.cache_data(ttl=60)  # cache for 60 seconds
+@st.cache_data(ttl=120)  # cache for 120 seconds
 def load_inventory(_sheet_key: str) -> pd.DataFrame:
     ws = client.open_by_key(_sheet_key).worksheet("Inventory")
     data = ws.get_all_records()
-    return pd.DataFrame(data)
+    df_local = pd.DataFrame(data)
+    # Column safety
+    if "Category" not in df_local.columns:
+        df_local["Category"] = "Uncategorized"
+    # Normalize ImageURL (avoid NaN/None and stray spaces)
+    if "ImageURL" not in df_local.columns:
+        df_local["ImageURL"] = ""
+    else:
+        df_local["ImageURL"] = df_local["ImageURL"].fillna("").astype(str).str.strip()
+    return df_local
 
 def _clear_inventory_cache():
     load_inventory.clear()
@@ -48,17 +57,17 @@ st.markdown(
         font-size: 12px; border-top: 1px solid #cce0ff;
     }
 
-    /* Product card layout */
+    /* Product card */
     .p-card{
-      border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px;
-      height:100%; display:flex; flex-direction:column; gap:8px;
-      background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:12px;
+      height:100%; display:flex; flex-direction:column; gap:10px;
+      background:rgba(255,255,255,0.03);
     }
     .p-card .imgwrap{
       width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden;
       background:#0f1116; display:flex; align-items:center; justify-content:center;
     }
-    .p-card .imgwrap img{ width:100%; height:100%; object-fit:contain; }
+    .p-card .imgwrap img{ width:100%; height:100%; object-fit:cover; } /* crop to fill */
     .p-card .name{
       font-weight:600; font-size:14px; line-height:1.3;
       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
@@ -66,16 +75,15 @@ st.markdown(
     }
     .p-card .price-row{ margin-top:auto; }
     .p-card .price-tag{ font-size:16px; font-weight:700; }
+
+    /* Make the Streamlit button look inside the card */
+    .p-card .stButton > button{
+      width:100%; border-radius:10px; padding:6px 10px;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
-
-# ----- Column safety -----
-if "Category" not in df.columns:
-    df["Category"] = "Uncategorized"
-if "ImageURL" not in df.columns:
-    df["ImageURL"] = ""
 
 # ----- Session state defaults -----
 if "selected_item" not in st.session_state:
@@ -197,12 +205,12 @@ with st.container():
                 continue
             rec = page_df.iloc[idx]
 
-            img_url = str(rec.get("ImageURL", "") or "").strip()
-            if not img_url:
-                img_url = "no_image.png"  # local placeholder
+            # Safe image URL with fallback
+            val = rec.get("ImageURL", "")
+            img_url = (val or "").strip() or "no_image.png"  # local placeholder
 
             with cols[c]:
-                # HTML card for consistent layout
+                # Open card div, render content + Streamlit button inside, then close div
                 st.markdown(
                     f"""
                     <div class="p-card">
@@ -211,17 +219,18 @@ with st.container():
                       </div>
                       <div class="name">{rec['ItemName']}</div>
                       <div class="price-row"><div class="price-tag">Rp {float(rec['Price']):,.0f}</div></div>
-                    </div>
-                    """,
+                """,
                     unsafe_allow_html=True
                 )
+                # Button INSIDE the card
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
+                st.markdown("</div>", unsafe_allow_html=True)  # close .p-card
 
     # =========================================================
-    # SORT + RELOAD (side by side, below grid)
+    # SORT + RELOAD (same row, aligned)
     # =========================================================
     col_sort, col_reload = st.columns([3, 1])
     with col_sort:
@@ -234,7 +243,8 @@ with st.container():
             help="Pilih cara mengurutkan katalog."
         )
     with col_reload:
-        st.button("Reload Data", on_click=_clear_inventory_cache, help="Paksa refresh dari Google Sheets")
+        st.button("Reload Data", on_click=_clear_inventory_cache, use_container_width=True,
+                  help="Paksa refresh dari Google Sheets")
 
     # =========================================================
     # Smooth scroll to price after pick
