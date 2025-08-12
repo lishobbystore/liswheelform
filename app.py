@@ -142,4 +142,170 @@ with st.container():
             st.rerun()
     with col_info:
         st.markdown(
-            f"<div style='text-align:center'>Halaman {st.session_state.page} dari {total_pages} &middot; {total_items} item</di_
+            f"<div style='text-align:center'>Halaman {st.session_state.page} dari {total_pages} &middot; {total_items} item</div>",
+            unsafe_allow_html=True
+        )
+    with col_next:
+        if st.button("Next ⟶", disabled=(st.session_state.page >= total_pages)):
+            st.session_state.page += 1
+            st.rerun()
+
+    start = (st.session_state.page - 1) * page_size
+    end = start + page_size
+    page_df = df_filtered.iloc[start:end].reset_index(drop=True)
+
+    # =========================================================
+    # PRODUCT GRID (3 columns desktop-ish)
+    # =========================================================
+    num_cols = 3
+    rows = math.ceil(len(page_df) / num_cols)
+
+    for r in range(rows):
+        cols = st.columns(num_cols)
+        for c in range(num_cols):
+            idx = r * num_cols + c
+            if idx >= len(page_df):
+                continue
+            rec = page_df.iloc[idx]
+
+            with cols[c]:
+                # Image (placeholder file if empty)
+                img_url = str(rec.get("ImageURL", "") or "").strip()
+                if img_url:
+                    st.image(img_url, use_container_width=True)
+                else:
+                    st.image("no_image.png", use_container_width=True)  # local placeholder
+
+                st.markdown(f"**{rec['ItemName']}**")
+                st.markdown(
+                    f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>",
+                    unsafe_allow_html=True
+                )
+
+                if st.button("Pilih", key=f"choose_{start+idx}"):
+                    st.session_state.selected_item = rec["ItemName"]
+                    st.session_state.jump_to_price = True  # trigger smooth scroll
+                    st.toast(f"Item dipilih: {st.session_state.selected_item}")
+
+    # =========================================================
+    # SORTING CONTROL (below grid; affects next rerun)
+    # =========================================================
+    st.selectbox(
+        "Urutkan",
+        ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
+        key="sort_option",
+        index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
+        help="Pilih cara mengurutkan katalog. Default tidak diurutkan."
+    )
+
+    # =========================================================
+    # Smooth scroll to price after pick (OUTSIDE grid loop)
+    # =========================================================
+    if st.session_state.jump_to_price:
+        components.html(
+            """
+            <script>
+            const el = window.parent.document.getElementById("price-section");
+            if (el) { el.scrollIntoView({behavior:"smooth", block:"start"}); }
+            </script>
+            """,
+            height=0,
+        )
+        st.session_state.jump_to_price = False
+
+    # =========================================================
+    # PRICE + DISCOUNT (OUTSIDE grid loop)
+    # =========================================================
+    # anchor for scrolling
+    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
+
+    # fallback ke item pertama di halaman jika belum ada pilihan
+    if not st.session_state.selected_item:
+        st.session_state.selected_item = page_df.iloc[0]["ItemName"]
+
+    sel_row = df[df["ItemName"] == st.session_state.selected_item].iloc[0]
+    selected_item = sel_row["ItemName"]
+    price = float(sel_row["Price"])
+
+    st.write("---")
+    st.subheader("Detail Harga")
+    st.caption("Item yang dipilih akan muncul di sini. Kamu bisa ganti pilihan dari katalog di atas.")
+    st.write(f"**Item:** {selected_item}")
+    st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
+
+    discount = st.selectbox("Dapet Discount Berapa % di Live?", [20, 25, 30, 35, 40])
+    final_price = price * (1 - discount / 100)
+    st.markdown(
+        f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>',
+        unsafe_allow_html=True
+    )
+
+    # =========================================================
+    # BUYER FORM
+    # =========================================================
+    st.subheader("Data Pembeli")
+    name = st.text_input("Nama Kamu")
+    wa_number = st.text_input("Nomor WhatsApp", placeholder="0891234567788")
+    address = st.text_area(
+        "Alamat Lengkap",
+        placeholder="Contoh: Jl. Medan Merdeka Utara No. 3, Kel. Gambir, Kec. Gambir, Kota Jakarta Pusat, DKI Jakarta 10110"
+    )
+    st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
+
+    # =========================================================
+    # SUBMIT
+    # =========================================================
+    if st.button("Submit Order"):
+        if not name.strip() or not wa_number.strip() or not address.strip():
+            st.error("Tolong isi Nama Kamu, Nomor WhatsApp, dan Alamat Lengkap.")
+        elif not wa_number.strip().isdigit():
+            st.error("Nomor WhatsApp harus berupa angka saja (tanpa spasi atau simbol).")
+        else:
+            tz = pytz.timezone("Asia/Jakarta")
+            current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
+            # Orders header expected:
+            # Time | Name | WhatsApp | Address | Item | Price | Discount | FinalPrice
+            orders_sheet.append_row([
+                current_time,
+                name,
+                wa_number,
+                address,
+                selected_item,
+                price,
+                discount,
+                final_price
+            ])
+
+            st.success("Order submitted! Please follow the instructions below to pay.")
+
+            st.markdown(f"""
+            ## Instruksi Pembayaran
+            Transfer ke: **BCA 2530244574 a/n PT. Licht Cahaya Abadi**  
+            Mohon cantumkan note:
+            - `"Pembayaran atas nama {name}"`
+            Setelah transfer, harap konfirmasi via WhatsApp: **+62 819-5255-5657**
+            """)
+
+            st.write("---")
+            st.subheader("Order Summary")
+            st.write(f"**Name:** {name}")
+            st.write(f"**WhatsApp:** {wa_number}")
+            st.write(f"**Alamat:** {address}")
+            st.write(f"**Item:** {selected_item}")
+            st.write(f"**Original Price:** Rp {price:,.0f}")
+            st.write(f"**Discount:** {discount}%")
+            st.write(f"**Final Price:** Rp {final_price:,.0f}")
+
+# Footer (outside container)
+st.markdown(
+    """
+    <div class="footer footer-desktop">
+        &copy; 2025 Lichtschein Hobby Store | Follow @lishobbystore on Instagram for more promos! 🚀
+    </div>
+    <div class="footer footer-mobile">
+        Follow @lishobbystore on Instagram for more promos!
+    </div>
+    """,
+    unsafe_allow_html=True
+)
