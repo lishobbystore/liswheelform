@@ -168,35 +168,35 @@ with st.container():
     # =========================================================
     # PRODUCT GRID (3 columns desktop-ish)
     # =========================================================
-    num_cols = 3
-    rows = math.ceil(len(page_df) / num_cols)
+   # =========================================================
+# PRODUCT GRID (3 columns desktop-ish)
+# =========================================================
+num_cols = 3
+rows = math.ceil(len(page_df) / num_cols)
 
-    for r in range(rows):
-        cols = st.columns(num_cols, vertical_alignment="top")
-        for c in range(num_cols):
-            idx = r * num_cols + c
-            if idx >= len(page_df):
-                continue
-            rec = page_df.iloc[idx]
+for r in range(rows):
+    cols = st.columns(num_cols, vertical_alignment="top")
+    for c in range(num_cols):
+        idx = r * num_cols + c
+        if idx >= len(page_df):
+            continue
+        rec = page_df.iloc[idx]
 
-            with cols[c]:
-                # Image (placeholder if empty)
-                img_url = str(rec.get("ImageURL", "") or "").strip()
-                if img_url:
-                    st.image(img_url, use_container_width=True)
-                else:
-                    st.markdown(
-                        "<div style='width:100%;aspect-ratio:1/1;background:#f7f7fb;display:flex;align-items:center;justify-content:center;border-radius:10px;color:#777;'>No Image</div>",
-                        unsafe_allow_html=True
-                    )
+        with cols[c]:
+            # Image (placeholder file if empty)
+            img_url = str(rec.get("ImageURL", "") or "").strip()
+            if img_url:
+                st.image(img_url, use_container_width=True)
+            else:
+                st.image("no_image.jpg", use_container_width=True)  # <<-- local placeholder image
 
-                st.markdown(f"**{rec['ItemName']}**")
-                st.markdown(f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>", unsafe_allow_html=True)
+            st.markdown(f"**{rec['ItemName']}**")
+            st.markdown(f"<div class='price' style='font-size:16px;'>Rp {float(rec['Price']):,.0f}</div>", unsafe_allow_html=True)
 
-                if st.button("Pilih", key=f"choose_{start+idx}"):
-                    st.session_state.selected_item = rec["ItemName"]
-                    st.session_state.jump_to_price = True  # trigger smooth scroll
-                    st.toast(f"Item dipilih: {st.session_state.selected_item}")
+            if st.button("Pilih", key=f"choose_{start+idx}"):
+                st.session_state.selected_item = rec["ItemName"]
+                st.session_state.jump_to_price = True  # trigger smooth scroll
+                st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
     # Smooth scroll to price after pick
