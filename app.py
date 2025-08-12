@@ -68,10 +68,16 @@ st.markdown(
     }
 
     /* Product card */
-    .p-card{
-      border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:12px;
-      height:100%; display:flex; flex-direction:column; gap:10px;
-      background:rgba(255,255,255,0.03);
+    .p-card {
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 12px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 12px; /* extra space for the button */
     }
     .p-card .imgwrap{
       width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden;
@@ -142,7 +148,7 @@ with st.container():
     search_query = st.text_input(
         "Cari item (nama mengandung kata ini)",
         value=st.session_state.search_query,
-        placeholder="Contoh: nendoroid, klee, figma ...",
+        placeholder="Contoh: zhongli, miku, figma ...",
         key="search_query",
         on_change=reset_page
     )
