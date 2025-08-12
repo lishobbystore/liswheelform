@@ -6,6 +6,8 @@ from datetime import datetime
 import pytz
 import math
 import streamlit.components.v1 as components  # for smooth scroll
+from pathlib import Path
+import base64
 
 # --- Google Sheets API setup ---
 scope = [
@@ -16,6 +18,17 @@ service_account_info = st.secrets["gcp_service_account"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
 client = gspread.authorize(creds)
 sheet_key = st.secrets["sheets"]["sheet_key"]
+
+# Prepare base64 data-URI for local placeholder (so <img> always works)
+def _load_placeholder_data_uri() -> str:
+    p = Path(__file__).with_name("no_image.png")
+    if p.exists():
+        b = p.read_bytes()
+        return "data:image/png;base64," + base64.b64encode(b).decode("ascii")
+    # Fallback 1x1 transparent PNG
+    return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+
+PLACEHOLDER_DATA_URI = _load_placeholder_data_uri()
 
 # ----- Cached loader for Inventory (anti-429) -----
 @st.cache_data(ttl=120)  # cache for 120 seconds
@@ -32,9 +45,6 @@ def load_inventory(_sheet_key: str) -> pd.DataFrame:
     else:
         df_local["ImageURL"] = df_local["ImageURL"].fillna("").astype(str).str.strip()
     return df_local
-
-def _clear_inventory_cache():
-    load_inventory.clear()
 
 # Orders sheet (write only on submit)
 orders_sheet = client.open_by_key(sheet_key).worksheet("Orders")
@@ -76,8 +86,8 @@ st.markdown(
     .p-card .price-row{ margin-top:auto; }
     .p-card .price-tag{ font-size:16px; font-weight:700; }
 
-    /* Make the Streamlit button look inside the card */
-    .p-card .stButton > button{
+    /* Make the Streamlit button look aligned to the card width */
+    .stButton > button{
       width:100%; border-radius:10px; padding:6px 10px;
     }
     </style>
@@ -115,7 +125,6 @@ with st.container():
     # =========================================================
     # FILTERS (Category + Search)
     # =========================================================
-    # Category (keep original order from sheet)
     raw_categories = df["Category"].dropna().tolist()
     seen = set(); categories = []
     for c in raw_categories:
@@ -148,7 +157,7 @@ with st.container():
 
     if search_query.strip():
         q = search_query.strip().lower()
-        df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
+        df_filtered = df_filtered[df_filtered["ItemName"]].str.lower().str.contains(q, na=False)
 
     # Sorting (applied before pagination)
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
@@ -205,46 +214,44 @@ with st.container():
                 continue
             rec = page_df.iloc[idx]
 
-            # Safe image URL with fallback
-            val = rec.get("ImageURL", "")
-            img_url = (val or "").strip() or "no_image.png"  # local placeholder
+            # Safe image URL with guaranteed placeholder data-URI
+            val = str(rec.get("ImageURL", "") or "").strip().lower()
+            if val.startswith("http://") or val.startswith("https://") or val.startswith("data:"):
+                img_src = rec["ImageURL"]
+            else:
+                img_src = PLACEHOLDER_DATA_URI
 
             with cols[c]:
-                # Open card div, render content + Streamlit button inside, then close div
+                # Card HTML
                 st.markdown(
                     f"""
                     <div class="p-card">
                       <div class="imgwrap">
-                        <img src="{img_url}" alt="product" />
+                        <img src="{img_src}" alt="product" />
                       </div>
                       <div class="name">{rec['ItemName']}</div>
                       <div class="price-row"><div class="price-tag">Rp {float(rec['Price']):,.0f}</div></div>
-                """,
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
-                # Button INSIDE the card
+                # Button right under card (aligned width via CSS)
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
-                st.markdown("</div>", unsafe_allow_html=True)  # close .p-card
 
     # =========================================================
-    # SORT + RELOAD (same row, aligned)
+    # SORT (Reload removed)
     # =========================================================
-    col_sort, col_reload = st.columns([3, 1])
-    with col_sort:
-        st.selectbox(
-            "Urutkan",
-            ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
-            key="sort_option",
-            index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
-            on_change=reset_page,
-            help="Pilih cara mengurutkan katalog."
-        )
-    with col_reload:
-        st.button("Reload Data", on_click=_clear_inventory_cache, use_container_width=True,
-                  help="Paksa refresh dari Google Sheets")
+    st.selectbox(
+        "Urutkan",
+        ["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"],
+        key="sort_option",
+        index=["Tanpa urutan", "Harga Terendah", "Harga Tertinggi", "Nama A-Z"].index(st.session_state.sort_option),
+        on_change=reset_page,
+        help="Pilih cara mengurutkan katalog."
+    )
 
     # =========================================================
     # Smooth scroll to price after pick
