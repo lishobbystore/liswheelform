@@ -71,6 +71,10 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ----- Category safety: kalau kolom belum ada, isi 'Uncategorized'
+if "Category" not in df.columns:
+    df["Category"] = "Uncategorized"
+
 with st.container():
     st.image("banner.jpg", use_container_width=True)
     st.title(" Lis Live Discount Form")
@@ -84,13 +88,31 @@ with st.container():
     )
     
     st.caption("Harap isi lengkap: nama jalan, kelurahan, kecamatan, kota/kabupaten, provinsi, dan kode pos.")
-
-    item_names = df["ItemName"].tolist()
     
+       # ====== CATEGORY FILTER (di atas item)
+    categories = sorted([c for c in df["Category"].dropna().unique().tolist()])
+    categories = ["Semua Kategori"] + categories
+
+    selected_category = st.selectbox("Pilih Kategori", categories, index=0)
+
+    if selected_category == "Semua Kategori":
+        df_filtered = df.copy()
+    else:
+        df_filtered = df[df["Category"] == selected_category].copy()
+
+    # Kalau kategori tidak punya item
+    if df_filtered.empty:
+        st.warning("Belum ada item untuk kategori ini.")
+        st.stop()
+
     st.caption("Tips: Kamu bisa mulai mengetik untuk mencari item lebih cepat.")
+    item_names = df_filtered["ItemName"].tolist()
     selected_item = st.selectbox("Pilih Item", item_names)
 
-    price = float(df.loc[df["ItemName"] == selected_item, "Price"].values[0])
+    # Ambil baris item terpilih
+    row = df_filtered.loc[df_filtered["ItemName"] == selected_item].iloc[0]
+    price = float(row["Price"])
+    item_category = row["Category"]  # simpan kategori item terpilih
     
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
