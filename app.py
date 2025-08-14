@@ -104,6 +104,13 @@ if "selected_category" not in st.session_state:
     st.session_state.selected_category = "Semua Kategori"
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
+# NEW: scroll helpers
+if "scroll_seq" not in st.session_state:
+    st.session_state.scroll_seq = 0
+if "jump_to_catalog_top" not in st.session_state:
+    st.session_state.jump_to_catalog_top = False
+if "scroll_top_seq" not in st.session_state:
+    st.session_state.scroll_top_seq = 0
 
 # Helper: reset page to 1 on filter changes
 def reset_page():
@@ -117,6 +124,9 @@ with st.container():
         '<div>Udah gacha di live? Saatnya kamu kunci diskonnya — isi ini semua and we’ll handle the rest!</div><br/>',
         unsafe_allow_html=True
     )
+
+    # Catalog TOP anchor (for bottom pager to scroll up)
+    st.markdown('<div id="catalog-top"></div>', unsafe_allow_html=True)
 
     # =========================================================
     # FILTERS (Category + Search)
@@ -138,7 +148,7 @@ with st.container():
     search_query = st.text_input(
         "Cari item (nama mengandung kata ini)",
         value=st.session_state.search_query,
-        placeholder="Contoh: Miku, zhongli, figma ...",
+        placeholder="Contoh: nendoroid, klee, figma ...",
         key="search_query",
         on_change=reset_page
     )
@@ -177,6 +187,7 @@ with st.container():
     total_pages = max(1, math.ceil(total_items / page_size))
     st.session_state.page = min(max(1, st.session_state.page), total_pages)
 
+    # TOP pagination (keep existing)
     col_prev, col_info, col_next = st.columns([1, 2, 1])
     with col_prev:
         if st.button("⟵ Prev", disabled=(st.session_state.page <= 1)):
@@ -232,10 +243,11 @@ with st.container():
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
+                    st.session_state.scroll_seq += 1   # ensure scroller re-renders
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORT (no reload button)
+    # SORT (kept) + BOTTOM pagination (new)
     # =========================================================
     st.selectbox(
         "Urutkan",
@@ -246,20 +258,68 @@ with st.container():
         help="Pilih cara mengurutkan katalog."
     )
 
+    # BOTTOM pagination (mobile friendly)
+    col_prev_b, col_info_b, col_next_b = st.columns([1, 2, 1])
+    with col_prev_b:
+        if st.button("⟵ Prev", key="prev_bottom", disabled=(st.session_state.page <= 1)):
+            st.session_state.page -= 1
+            st.session_state.jump_to_catalog_top = True
+            st.session_state.scroll_top_seq += 1
+            st.rerun()
+    with col_info_b:
+        st.markdown(
+            f"<div style='text-align:center'>Halaman {st.session_state.page} dari {total_pages} · {total_items} item</div>",
+            unsafe_allow_html=True
+        )
+    with col_next_b:
+        if st.button("Next ⟶", key="next_bottom", disabled=(st.session_state.page >= total_pages)):
+            st.session_state.page += 1
+            st.session_state.jump_to_catalog_top = True
+            st.session_state.scroll_top_seq += 1
+            st.rerun()
+
     # =========================================================
-    # Smooth scroll to price after pick
+    # Smooth scroll handlers
     # =========================================================
-    if st.session_state.jump_to_price:
+    # Scroll to price after pick
+    if st.session_state.get("jump_to_price"):
         components.html(
             """
             <script>
-            const el = window.parent.document.getElementById("price-section");
-            if (el) { el.scrollIntoView({behavior:"smooth", block:"start"}); }
+            (function() {
+              try {
+                const el = window.parent.document.getElementById("price-section");
+                if (!el) return;
+                el.scrollIntoView({behavior:"auto", block:"start"});
+                setTimeout(() => el.scrollIntoView({behavior:"smooth", block:"start"}), 50);
+              } catch(e) {}
+            })();
             </script>
             """,
             height=0,
+            key=f"scroller_price_{st.session_state.scroll_seq}"
         )
         st.session_state.jump_to_price = False
+
+    # Scroll to catalog top after bottom Prev/Next
+    if st.session_state.get("jump_to_catalog_top"):
+        components.html(
+            """
+            <script>
+            (function() {
+              try {
+                const el = window.parent.document.getElementById("catalog-top");
+                if (!el) return;
+                el.scrollIntoView({behavior:"auto", block:"start"});
+                setTimeout(() => el.scrollIntoView({behavior:"smooth", block:"start"}), 50);
+              } catch(e) {}
+            })();
+            </script>
+            """,
+            height=0,
+            key=f"scroller_top_{st.session_state.scroll_top_seq}"
+        )
+        st.session_state.jump_to_catalog_top = False
 
     # =========================================================
     # PRICE + DISCOUNT
