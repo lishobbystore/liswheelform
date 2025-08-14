@@ -165,7 +165,7 @@ with st.container():
 
     if search_query.strip():
         q = search_query.strip().lower()
-        df_filtered = df_filtered[df_filtered["ItemName"]..str.lower().str.contains(q, na=False)]
+        df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
 
     # Sorting
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
@@ -325,7 +325,6 @@ with st.container():
     # =========================================================
     # PRICE + DISCOUNT
     # =========================================================
-    # (anchor already placed at top; do not duplicate)
     if not st.session_state.selected_item:
         st.session_state.selected_item = page_df.iloc[0]["ItemName"]
 
