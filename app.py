@@ -121,9 +121,6 @@ with st.container():
         unsafe_allow_html=True
     )
 
-    # Anchor for price scroll (place early so it exists before JS)
-    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
-
     # =========================================================
     # FILTERS (Category + Search)
     # =========================================================
@@ -161,7 +158,7 @@ with st.container():
         q = search_query.strip().lower()
         df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
 
-    # Sorting
+    # Sorting (applied before pagination)
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
     if st.session_state.sort_option == "Harga Terendah":
         df_filtered = df_filtered.sort_values(by="_PriceNum", ascending=True, kind="stable")
@@ -270,31 +267,10 @@ with st.container():
             st.rerun()
 
     # =========================================================
-    # Smooth scroll to price only (no scroll to top)
+    # PRICE + DISCOUNT  (anchor is HERE, right above the section)
     # =========================================================
-    if st.session_state.get("jump_to_price"):
-        nonce = st.session_state.get("scroll_seq", 0)
-        components.html(
-            f"""
-            <script>
-            (function() {{
-              try {{
-                const el = window.parent.document.getElementById("price-section");
-                if (!el) return;
-                el.scrollIntoView({{behavior:"auto", block:"start"}});
-                setTimeout(() => el.scrollIntoView({{behavior:"smooth", block:"start"}}), 50);
-                // nonce to force rerender: {nonce}
-              }} catch(e) {{}}
-            }})();
-            </script>
-            """,
-            height=0
-        )
-        st.session_state.jump_to_price = False
+    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
 
-    # =========================================================
-    # PRICE + DISCOUNT
-    # =========================================================
     if not st.session_state.selected_item:
         st.session_state.selected_item = page_df.iloc[0]["ItemName"]
 
@@ -314,6 +290,27 @@ with st.container():
         f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>',
         unsafe_allow_html=True
     )
+
+    # ---- Smooth scroll to price (run AFTER the section exists) ----
+    if st.session_state.get("jump_to_price"):
+        nonce = st.session_state.get("scroll_seq", 0)
+        components.html(
+            f"""
+            <script>
+            (function() {{
+              try {{
+                const el = window.parent.document.getElementById("price-section");
+                if (!el) return;
+                el.scrollIntoView({{behavior:"auto", block:"start"}});
+                setTimeout(() => el.scrollIntoView({{behavior:"smooth", block:"start"}}), 50);
+                // nonce to force rerender: {nonce}
+              }} catch(e) {{}}
+            }})();
+            </script>
+            """,
+            height=0
+        )
+        st.session_state.jump_to_price = False
 
     # =========================================================
     # BUYER FORM
