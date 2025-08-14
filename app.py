@@ -104,14 +104,9 @@ if "selected_category" not in st.session_state:
     st.session_state.selected_category = "Semua Kategori"
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
-
-# NEW: scroll helpers
-if "scroll_seq" not in st.session_state:          # for price scroller
+# Only for forcing the scroll component to re-render
+if "scroll_seq" not in st.session_state:
     st.session_state.scroll_seq = 0
-if "jump_to_catalog_top" not in st.session_state: # flag for bottom pager
-    st.session_state.jump_to_catalog_top = False
-if "scroll_top_seq" not in st.session_state:      # for top scroller
-    st.session_state.scroll_top_seq = 0
 
 # Helper: reset page to 1 on filter changes
 def reset_page():
@@ -126,8 +121,7 @@ with st.container():
         unsafe_allow_html=True
     )
 
-    # Anchors (must exist before any scroll JS runs)
-    st.markdown('<div id="catalog-top"></div>', unsafe_allow_html=True)
+    # Anchor for price scroll (place early so it exists before JS)
     st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
 
     # =========================================================
@@ -245,11 +239,11 @@ with st.container():
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
-                    st.session_state.scroll_seq += 1  # ensure scroll JS content changes
+                    st.session_state.scroll_seq += 1  # force scroll JS to re-render
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORT + BOTTOM pagination
+    # SORT + BOTTOM pagination (no auto scroll)
     # =========================================================
     st.selectbox(
         "Urutkan",
@@ -264,8 +258,6 @@ with st.container():
     with col_prev_b:
         if st.button("⟵ Prev", key="prev_bottom", disabled=(st.session_state.page <= 1)):
             st.session_state.page -= 1
-            st.session_state.jump_to_catalog_top = True
-            st.session_state.scroll_top_seq += 1
             st.rerun()
     with col_info_b:
         st.markdown(
@@ -275,12 +267,10 @@ with st.container():
     with col_next_b:
         if st.button("Next ⟶", key="next_bottom", disabled=(st.session_state.page >= total_pages)):
             st.session_state.page += 1
-            st.session_state.jump_to_catalog_top = True
-            st.session_state.scroll_top_seq += 1
             st.rerun()
 
     # =========================================================
-    # Smooth scroll handlers (no key=, use nonce text)
+    # Smooth scroll to price only (no scroll to top)
     # =========================================================
     if st.session_state.get("jump_to_price"):
         nonce = st.session_state.get("scroll_seq", 0)
@@ -301,26 +291,6 @@ with st.container():
             height=0
         )
         st.session_state.jump_to_price = False
-
-    if st.session_state.get("jump_to_catalog_top"):
-        nonce2 = st.session_state.get("scroll_top_seq", 0)
-        components.html(
-            f"""
-            <script>
-            (function() {{
-              try {{
-                const el = window.parent.document.getElementById("catalog-top");
-                if (!el) return;
-                el.scrollIntoView({{behavior:"auto", block:"start"}});
-                setTimeout(() => el.scrollIntoView({{behavior:"smooth", block:"start"}}), 50);
-                // nonce to force rerender: {nonce2}
-              }} catch(e) {{}}
-            }})();
-            </script>
-            """,
-            height=0
-        )
-        st.session_state.jump_to_catalog_top = False
 
     # =========================================================
     # PRICE + DISCOUNT
