@@ -104,12 +104,13 @@ if "selected_category" not in st.session_state:
     st.session_state.selected_category = "Semua Kategori"
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
+
 # NEW: scroll helpers
-if "scroll_seq" not in st.session_state:
+if "scroll_seq" not in st.session_state:          # for price scroller
     st.session_state.scroll_seq = 0
-if "jump_to_catalog_top" not in st.session_state:
+if "jump_to_catalog_top" not in st.session_state: # flag for bottom pager
     st.session_state.jump_to_catalog_top = False
-if "scroll_top_seq" not in st.session_state:
+if "scroll_top_seq" not in st.session_state:      # for top scroller
     st.session_state.scroll_top_seq = 0
 
 # Helper: reset page to 1 on filter changes
@@ -125,8 +126,9 @@ with st.container():
         unsafe_allow_html=True
     )
 
-    # Catalog TOP anchor (for bottom pager to scroll up)
+    # Anchors (must exist before any scroll JS runs)
     st.markdown('<div id="catalog-top"></div>', unsafe_allow_html=True)
+    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
 
     # =========================================================
     # FILTERS (Category + Search)
@@ -163,7 +165,7 @@ with st.container():
 
     if search_query.strip():
         q = search_query.strip().lower()
-        df_filtered = df_filtered[df_filtered["ItemName"].str.lower().str.contains(q, na=False)]
+        df_filtered = df_filtered[df_filtered["ItemName"]..str.lower().str.contains(q, na=False)]
 
     # Sorting
     df_filtered["_PriceNum"] = pd.to_numeric(df_filtered["Price"], errors="coerce")
@@ -187,7 +189,7 @@ with st.container():
     total_pages = max(1, math.ceil(total_items / page_size))
     st.session_state.page = min(max(1, st.session_state.page), total_pages)
 
-    # TOP pagination (keep existing)
+    # TOP pagination
     col_prev, col_info, col_next = st.columns([1, 2, 1])
     with col_prev:
         if st.button("⟵ Prev", disabled=(st.session_state.page <= 1)):
@@ -208,7 +210,7 @@ with st.container():
     page_df = df_filtered.iloc[start:end].reset_index(drop=True)
 
     # =========================================================
-    # PRODUCT GRID (3 columns) — optimized
+    # PRODUCT GRID (3 columns)
     # =========================================================
     num_cols = 3
     records = page_df.to_dict("records")
@@ -222,7 +224,7 @@ with st.container():
                 continue
             rec = records[idx]
 
-            # Fast image source: use URL if http(s)/data, else inline SVG placeholder
+            # Use URL if http(s)/data, else inline SVG placeholder
             raw = str(rec.get("ImageURL", "") or "").strip()
             low = raw.lower()
             img_src = raw if (low.startswith("http://") or low.startswith("https://") or low.startswith("data:")) else PLACEHOLDER_SVG
@@ -243,11 +245,11 @@ with st.container():
                 if st.button("Pilih", key=f"choose_{start+idx}"):
                     st.session_state.selected_item = rec["ItemName"]
                     st.session_state.jump_to_price = True
-                    st.session_state.scroll_seq += 1   # ensure scroller re-renders
+                    st.session_state.scroll_seq += 1  # ensure scroll JS content changes
                     st.toast(f"Item dipilih: {st.session_state.selected_item}")
 
     # =========================================================
-    # SORT (kept) + BOTTOM pagination (new)
+    # SORT + BOTTOM pagination
     # =========================================================
     st.selectbox(
         "Urutkan",
@@ -258,7 +260,6 @@ with st.container():
         help="Pilih cara mengurutkan katalog."
     )
 
-    # BOTTOM pagination (mobile friendly)
     col_prev_b, col_info_b, col_next_b = st.columns([1, 2, 1])
     with col_prev_b:
         if st.button("⟵ Prev", key="prev_bottom", disabled=(st.session_state.page <= 1)):
@@ -279,53 +280,52 @@ with st.container():
             st.rerun()
 
     # =========================================================
-    # Smooth scroll handlers
+    # Smooth scroll handlers (no key=, use nonce text)
     # =========================================================
-    # Scroll to price after pick
     if st.session_state.get("jump_to_price"):
+        nonce = st.session_state.get("scroll_seq", 0)
         components.html(
-            """
+            f"""
             <script>
-            (function() {
-              try {
+            (function() {{
+              try {{
                 const el = window.parent.document.getElementById("price-section");
                 if (!el) return;
-                el.scrollIntoView({behavior:"auto", block:"start"});
-                setTimeout(() => el.scrollIntoView({behavior:"smooth", block:"start"}), 50);
-              } catch(e) {}
-            })();
+                el.scrollIntoView({{behavior:"auto", block:"start"}});
+                setTimeout(() => el.scrollIntoView({{behavior:"smooth", block:"start"}}), 50);
+                // nonce to force rerender: {nonce}
+              }} catch(e) {{}}
+            }})();
             </script>
             """,
-            height=0,
-            key=f"scroller_price_{st.session_state.scroll_seq}"
+            height=0
         )
         st.session_state.jump_to_price = False
 
-    # Scroll to catalog top after bottom Prev/Next
     if st.session_state.get("jump_to_catalog_top"):
+        nonce2 = st.session_state.get("scroll_top_seq", 0)
         components.html(
-            """
+            f"""
             <script>
-            (function() {
-              try {
+            (function() {{
+              try {{
                 const el = window.parent.document.getElementById("catalog-top");
                 if (!el) return;
-                el.scrollIntoView({behavior:"auto", block:"start"});
-                setTimeout(() => el.scrollIntoView({behavior:"smooth", block:"start"}), 50);
-              } catch(e) {}
-            })();
+                el.scrollIntoView({{behavior:"auto", block:"start"}});
+                setTimeout(() => el.scrollIntoView({{behavior:"smooth", block:"start"}}), 50);
+                // nonce to force rerender: {nonce2}
+              }} catch(e) {{}}
+            }})();
             </script>
             """,
-            height=0,
-            key=f"scroller_top_{st.session_state.scroll_top_seq}"
+            height=0
         )
         st.session_state.jump_to_catalog_top = False
 
     # =========================================================
     # PRICE + DISCOUNT
     # =========================================================
-    st.markdown('<div id="price-section"></div>', unsafe_allow_html=True)
-
+    # (anchor already placed at top; do not duplicate)
     if not st.session_state.selected_item:
         st.session_state.selected_item = page_df.iloc[0]["ItemName"]
 
