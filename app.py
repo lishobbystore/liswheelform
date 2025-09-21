@@ -284,7 +284,7 @@ with st.container():
     st.write(f"**Item:** {selected_item}")
     st.markdown(f'<div class="price">Harga: Rp {price:,.0f}</div>', unsafe_allow_html=True)
 
-    discount = st.selectbox("Dapet Discount Berapa % di Live?", [20, 25, 30, 35, 39.9999999])
+    discount = st.selectbox("Dapet Discount Berapa % di Live?", [30, 32, 34, 36, 38, 39.9999999])
     final_price = price * (1 - discount / 100)
     st.markdown(
         f'<div class="price">Harga Final Setelah {discount}% Discount: Rp {final_price:,.0f}</div><br/>',
